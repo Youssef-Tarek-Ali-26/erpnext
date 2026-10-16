@@ -71,6 +71,10 @@ class POSOpeningEntry(StatusUpdater):
 			)
 
 	def check_user_already_assigned(self):
+		from erpnext.accounts.doctype.pos_closing_entry.invoice_scope import validate_cashier_membership
+
+		if validate_cashier_membership(self):
+			return
 		if frappe.db.exists("POS Opening Entry", {"user": self.user, "status": "Open"}):
 			frappe.throw(
 				title=_("Cannot Assign Cashier"),
@@ -114,7 +118,11 @@ class POSOpeningEntry(StatusUpdater):
 		from erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry import get_invoices
 
 		invoices = get_invoices(
-			self.period_start_date, frappe.utils.get_datetime(), self.pos_profile, self.user
+			self.period_start_date,
+			frappe.utils.get_datetime(),
+			self.pos_profile,
+			self.user,
+			pos_opening_entry=self.name,
 		)
 		if invoices.get("invoices"):
 			frappe.throw(

@@ -16,6 +16,10 @@ from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import
 	unconsolidate_pos_invoices,
 )
 from erpnext.controllers.status_updater import StatusUpdater
+from erpnext.accounts.doctype.pos_closing_entry.invoice_scope import (
+	select_invoice_names,
+	validate_invoice_membership,
+)
 
 
 class POSClosingEntry(StatusUpdater):
@@ -125,7 +129,9 @@ class POSClosingEntry(StatusUpdater):
 				)
 			if pos_invoice.docstatus != 1:
 				invalid_row.setdefault("msg", []).append(_("POS Invoice is not submitted"))
-			if pos_invoice.owner != self.user:
+			if not validate_invoice_membership(
+				closing=self, invoice_doctype="POS Invoice", invoice_name=d.pos_invoice
+			) and pos_invoice.owner != self.user:
 				invalid_row.setdefault("msg", []).append(
 					_("POS Invoice isn't created by user {0}").format(frappe.bold(self.owner))
 				)
@@ -190,7 +196,9 @@ class POSClosingEntry(StatusUpdater):
 				)
 			if sales_invoice.docstatus != 1:
 				invalid_row.setdefault("msg", []).append(_("Sales Invoice is not submitted"))
-			if sales_invoice.owner != self.user:
+			if not validate_invoice_membership(
+				closing=self, invoice_doctype="Sales Invoice", invoice_name=d.sales_invoice
+			) and sales_invoice.owner != self.user:
 				invalid_row.setdefault("msg", []).append(
 					_("Sales Invoice isn't created by user {0}").format(frappe.bold(self.owner))
 				)
@@ -268,18 +276,25 @@ def get_cashiers(doctype: str, txt: str, searchfield: str, start: int, page_len:
 
 
 @frappe.whitelist()
-def get_invoices(start: str | datetime, end: str | datetime, pos_profile: str, user: str):
+def get_invoices(
+	start: str | datetime, end: str | datetime, pos_profile: str, user: str,
+	pos_opening_entry: str | None = None,
+):
 	invoice_doctype = frappe.db.get_single_value("POS Settings", "invoice_type")
 	frappe.has_permission("POS Profile", doc=pos_profile, throw=True)
 
 	frappe.has_permission("Sales Invoice", throw=True)
-	sales_inv_query = build_invoice_query("Sales Invoice", user, pos_profile, start, end)
+	sales_inv_query = build_invoice_query(
+		"Sales Invoice", user, pos_profile, start, end, pos_opening_entry=pos_opening_entry
+	)
 
 	query = sales_inv_query
 
 	if invoice_doctype == "POS Invoice":
 		frappe.has_permission("POS Invoice", throw=True)
-		pos_inv_query = build_invoice_query("POS Invoice", user, pos_profile, start, end)
+		pos_inv_query = build_invoice_query(
+			"POS Invoice", user, pos_profile, start, end, pos_opening_entry=pos_opening_entry
+		)
 		query = query + pos_inv_query
 
 	query = query.orderby(query.timestamp)
@@ -391,6 +406,7 @@ def make_closing_entry_from_opening(opening_entry):
 		closing_entry.period_end_date,
 		closing_entry.pos_profile,
 		closing_entry.user,
+		pos_opening_entry=opening_entry.name,
 	)
 
 	pos_invoices = []
@@ -439,8 +455,12 @@ def make_closing_entry_from_opening(opening_entry):
 	return closing_entry
 
 
-def build_invoice_query(invoice_doctype, user, pos_profile, start, end):
+def build_invoice_query(invoice_doctype, user, pos_profile, start, end, *, pos_opening_entry=None):
 	InvoiceDocType = DocType(invoice_doctype)
+	names = select_invoice_names(
+		invoice_doctype=invoice_doctype, user=user, pos_profile=pos_profile,
+		start=start, end=end, pos_opening_entry=pos_opening_entry,
+	)
 	query = (
 		frappe.qb.from_(InvoiceDocType)
 		.select(
@@ -459,7 +479,7 @@ def build_invoice_query(invoice_doctype, user, pos_profile, start, end):
 			ConstantColumn(invoice_doctype).as_("doctype"),
 		)
 		.where(
-			(InvoiceDocType.owner == user)
+			((InvoiceDocType.owner == user) if names is None else InvoiceDocType.name.isin(names))
 			& (InvoiceDocType.docstatus == 1)
 			& (InvoiceDocType.is_pos == 1)
 			& (InvoiceDocType.pos_profile == pos_profile)
