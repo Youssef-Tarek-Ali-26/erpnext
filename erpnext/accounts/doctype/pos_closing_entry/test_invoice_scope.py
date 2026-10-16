@@ -4,15 +4,15 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests import IntegrationTestCase
 
 from erpnext.accounts.doctype.pos_closing_entry.invoice_scope import (
 	select_invoice_names, validate_cashier_membership, validate_invoice_membership,
 )
 from erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry import build_invoice_query
+from erpnext.tests.utils import ERPNextTestSuite
 
 
-class TestInvoiceScope(IntegrationTestCase):
+class TestInvoiceScope(ERPNextTestSuite):
 	def test_no_hook_native_cashier_and_profile_assignment_with_real_opening(self):
 		from erpnext.accounts.doctype.pos_closing_entry.test_pos_closing_entry import init_user_and_profile
 		from erpnext.accounts.doctype.pos_opening_entry.pos_opening_entry import POSOpeningEntry

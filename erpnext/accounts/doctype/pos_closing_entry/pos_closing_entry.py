@@ -11,15 +11,15 @@ from frappe.query_builder import functions as fn
 from frappe.query_builder.custom import ConstantColumn
 from frappe.utils import flt
 
+from erpnext.accounts.doctype.pos_closing_entry.invoice_scope import (
+	select_invoice_names,
+	validate_invoice_membership,
+)
 from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import (
 	consolidate_pos_invoices,
 	unconsolidate_pos_invoices,
 )
 from erpnext.controllers.status_updater import StatusUpdater
-from erpnext.accounts.doctype.pos_closing_entry.invoice_scope import (
-	select_invoice_names,
-	validate_invoice_membership,
-)
 
 
 class POSClosingEntry(StatusUpdater):
